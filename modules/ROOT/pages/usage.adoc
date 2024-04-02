@@ -134,28 +134,36 @@ This is an example implementation using C# with the 1.3 .NET driver.
 
 [source, csharp]
 ----
-var token = AuthTokens.kerberos(getTicket("neo4j"));
-	using (var driver = GraphDatabase.Driver("bolt://neo4j.windomain.local:7687", token))
+using (var driver = GraphDatabase.Driver(new Uri("bolt://neo4j.windomain.local:7687"), new KerberosTokenManager("neo4j")))
 	{
 		try
 		{
-			using (var session = driver.Session())
-				{
-					var result = session.Run("MATCH () RETURN count(*) AS count");
-					foreach (var record in result)
-					{
-						Console.WriteLine($"Nodecount: {record["count"].As<string>()}");
-					}
-				}
-		}
+        await using var session = driver.AsyncSession();
+        var result = await session.RunAsync("MATCH () RETURN count(*) AS count");
+        await foreach (var record in result)
+        {
+            Console.WriteLine($"Nodecount: {record["count"].As<string>()}");
+        }
+    }
 		catch (Exception e)
 		{
 			Console.WriteLine($"Error: {e.Message}");
 		}
 }
 
- private static String getTicket(string serviceName)
- {
+class KerberosTokenManager(string serviceName) : IAuthTokenManager
+{
+    public ValueTask<IAuthToken> GetTokenAsync(CancellationToken cancellationToken = default)
+    {
+        return new ValueTask<IAuthToken>(AuthTokens.Kerberos(getTicket(serviceName)));
+    }
+
+    public ValueTask<bool> HandleSecurityExceptionAsync(IAuthToken token, SecurityException exception, CancellationToken cancellationToken = default)
+    {
+        throw new NotImplementedException();
+    }
+
+    static String getTicket(string serviceName) {
 	AppDomain.CurrentDomain.SetPrincipalPolicy(System.Security.Principal.PrincipalPolicy.WindowsPrincipal);
 	var domain = Domain.GetCurrentDomain().ToString();
 
@@ -170,6 +178,7 @@ var token = AuthTokens.kerberos(getTicket("neo4j"));
 		return ticket;
 	}
  }
+}
 
 ----
 ====
