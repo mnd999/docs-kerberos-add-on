@@ -134,21 +134,19 @@ This is an example implementation using C# with the 5.18.0 .NET driver.
 
 [source, csharp]
 ----
-using (var driver = GraphDatabase.Driver(new Uri("bolt://neo4j.windomain.local:7687"), new KerberosTokenManager("neo4j")))
-	{
-		try
-		{
-        await using var session = driver.AsyncSession();
-        var result = await session.RunAsync("MATCH () RETURN count(*) AS count");
-        await foreach (var record in result)
-        {
-            Console.WriteLine($"Nodecount: {record["count"].As<string>()}");
-        }
-    }
-		catch (Exception e)
-		{
-			Console.WriteLine($"Error: {e.Message}");
-		}
+await using var driver = GraphDatabase.Driver(new Uri("bolt://neo4j.windomain.local:7687"), new KerberosTokenManager("neo4j"));
+		
+try	{
+    var (result, _) = await driver
+        .ExecutableQuery("MATCH () RETURN count(*) AS count")
+        .WithMap(r => r["count"].As<int>())
+        .WithReduce(() => 0, (a, b) => b)
+        .ExecuteAsync();
+
+     Console.WriteLine($"Node count: {result}");
+}
+catch (Exception e) {
+	Console.WriteLine($"Error: {e.Message}");
 }
 
 class KerberosTokenManager(string serviceName) : IAuthTokenManager
